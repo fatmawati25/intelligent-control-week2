@@ -1,0 +1,3 @@
+Setelah penugasan diberikan dan dilakukan percobaan, program dapat medeteksi warna dasar dengan baik.
+Untuk pengidentifikasian warna lainnya, perlu ditambahkan dataset dari Kaggle atau gunakan dataset sederhana dengan OpenCV.
+Pada layar akan menampilkan data nama warna dan tingkat akurasi warna tersebut.
