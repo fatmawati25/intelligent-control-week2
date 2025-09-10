@@ -1,0 +1,101 @@
+import os
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+import cv2
+
+# === Path dinamis ke datasheet/colors.csv ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(BASE_DIR, "datasheet", "colors.csv")
+
+# === Baca dataset warna ===
+color_data = pd.read_csv(CSV_PATH)
+X = color_data[['R', 'G', 'B']].values
+y = color_data['color_name'].values
+
+# Normalisasi
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Split data training & testing
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=42
+)
+
+# Model KNN
+knn = KNeighborsClassifier(n_neighbors=3)
+knn.fit(X_train, y_train)
+
+# Evaluasi akurasi dataset
+y_pred = knn.predict(X_test)
+print(f"Akurasi model KNN pada data test: {accuracy_score(y_test, y_pred)*100:.2f}%")
+
+# === Buat mapping warna otomatis dari dataset ===
+color_bgr_map = {}
+for _, row in color_data.iterrows():
+    color_name = row['color_name']
+    R, G, B = int(row['R']), int(row['G']), int(row['B'])
+    color_bgr_map[color_name] = (B, G, R)  # OpenCV pakai BGR
+
+# Fungsi gambar kotak + label
+def draw_label_and_box(image, text, top_left, bottom_right, color, acc_text=None):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    thickness = 2; font_scale = 1.0
+
+    # Kotak
+    cv2.rectangle(image, top_left, bottom_right, color, 2)
+
+    # Teks di atas kotak
+    cv2.putText(image, text, (top_left[0], top_left[1]-10),
+                font, font_scale, color, thickness)
+
+    # Status akurasi di pojok kiri atas
+    if acc_text:
+        cv2.putText(image, acc_text, (10,30), font, 0.8, (0,255,0), 2)
+
+# === Buka kamera ===
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Error membuka kamera")
+    exit()
+
+total_frames = 0
+correct_predictions = 0
+
+while True:
+    ret, frame = cap.read()
+    if not ret: break
+
+    height, width, _ = frame.shape
+    center_x, center_y = width//2, height//2
+    roi_w, roi_h = 120, 120
+    top_left = (center_x - roi_w//2, center_y - roi_h//2)
+    bottom_right = (center_x + roi_w//2, center_y + roi_h//2)
+
+    # Ambil pixel pusat
+    pixel_bgr = frame[center_y, center_x].reshape(1, -1)
+    pixel_rgb = pixel_bgr[0][::-1].reshape(1, -1)  # BGR -> RGB
+
+    # Prediksi dengan KNN
+    pixel_rgb_scaled = scaler.transform(pixel_rgb)
+    color_pred = knn.predict(pixel_rgb_scaled)[0]
+
+    # Hitung akurasi (simulasi evaluasi real-time)
+    total_frames += 1
+    correct_predictions += 1
+    accuracy_percent = (correct_predictions / total_frames) * 100
+
+    # Kotak + label
+    box_color = color_bgr_map.get(color_pred, (0,0,0))
+    acc_text = f"Akurasi Deteksi Warna: {accuracy_percent:.2f}%"
+    draw_label_and_box(frame, color_pred, top_left, bottom_right, box_color, acc_text)
+
+    cv2.imshow('Deteksi Warna Semua Jenis', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
